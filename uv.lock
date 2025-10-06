@@ -1548,6 +1548,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "openai" },
     { name = "ray", extra = ["default", "serve"] },
+    { name = "requests" },
     { name = "torch" },
     { name = "transformers" },
 ]
@@ -1558,6 +1559,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "openai", specifier = ">=1.107.3" },
     { name = "ray", extras = ["default", "serve", "server"], specifier = ">=2.49.1" },
+    { name = "requests", specifier = ">=2.32.5" },
     { name = "torch", specifier = ">=1.6.0" },
     { name = "transformers", specifier = ">=4.0.0" },
 ]
