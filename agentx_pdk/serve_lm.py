@@ -34,7 +34,9 @@ class ModelServer:
 
 def model_binder(config: dict):
     device = config.get("device", -1)
-    return ModelServer.bind(device=device)
+    model_name = config.get("model_name", -1)
+    task_type = config.get("task_type", -1)
+    return ModelServer.bind(device=device, model_name=model_name, task_type=task_type)
 
 # import asyncio
 
