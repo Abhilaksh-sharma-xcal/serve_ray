@@ -8,7 +8,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "fastapi>=0.116.1",
     "openai>=1.107.3",
-    "ray[default,serve,server]>=2.49.1",
+    "ray[default,serve,server]==2.48.0",
     "requests>=2.32.5",
     "torch>=1.6.0",
     "transformers>=4.0.0",
