@@ -7,7 +7,7 @@ from vllm.engine.async_llm_engine import AsyncLLMEngine
 class VLLMDeployment:
     def __init__(self, model_name: str):
         # Configure and initialize the vLLM engine
-        engine_args = AsyncEngineArgs(model=model_name, tensor_parallel_size=1, device="cpu")
+        engine_args = AsyncEngineArgs(model=model_name, tensor_parallel_size=1)
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.request_counter = 0
 
