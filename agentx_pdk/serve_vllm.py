@@ -3,7 +3,7 @@ from ray import serve
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 
-@serve.deployment()
+@serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
 class VLLMDeployment:
     def __init__(self, model_name: str):
         # Configure and initialize the vLLM engine
