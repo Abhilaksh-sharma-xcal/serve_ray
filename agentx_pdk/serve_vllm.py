@@ -2,45 +2,78 @@ import ray
 from ray import serve
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from typing import Dict, Any
+import os
+import json
+import traceback
 
-@serve.deployment(num_replicas=1, ray_actor_options={"num_gpus": 1})
-class VLLMDeployment:
-    def __init__(self, model_name: str):
-        # Configure and initialize the vLLM engine
-        engine_args = AsyncEngineArgs(model=model_name, tensor_parallel_size=1)
+@serve.deployment()
+class VLLMModelServer:
+    def __init__(self, model_name: str, **kwargs):
+        token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        if token:
+            os.environ["HF_TOKEN"] = token
+            print("[VLLM] Using Hugging Face token from env")
+
+
+        engine_args = AsyncEngineArgs(model=model_name, **kwargs)
+        print(f"[VLLM] Initializing model '{model_name}' with args: {kwargs}")
+
+        # Initialize the vLLM async engine
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         self.request_counter = 0
 
-    async def generate(self, prompt: str):
-        # Define generation parameters
-        sampling_params = {"temperature": 0.8, "top_p": 0.95, "max_tokens": 256}
-        
-        # Stream results from the vLLM engine
-        results_generator = self.engine.generate(prompt, sampling_params, request_id=f"req-{self.request_counter}")
-        self.request_counter += 1
-        
-        final_output = None
-        async for request_output in results_generator:
-            final_output = request_output
-        
-        return final_output.outputs[0].text
+    async def generate(self, prompt: str, sampling_params: Dict[str, Any] = None) -> str:
 
-    # This makes the deployment callable via HTTP
-    async def __call__(self, request) -> str:
-        data = await request.json()
-        prompt = data.get("prompt", "What is the meaning of life?")
-        return await self.generate(prompt)
+        sampling_params = sampling_params or {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "max_tokens": 256,
+        }
+
+        try:
+            request_id = f"req-{self.request_counter}"
+            self.request_counter += 1
+
+            results_generator = self.engine.generate(prompt, sampling_params, request_id=request_id)
+            final_output = None
+
+            async for request_output in results_generator:
+                final_output = request_output 
+
+            if not final_output or not final_output.outputs:
+                raise ValueError("No output generated.")
+
+            return final_output.outputs[0].text
+
+        except Exception as e:
+            print(f"[VLLM][Error] {traceback.format_exc()}")
+            raise RuntimeError(f"Generation failed: {e}")
+
+    async def __call__(self, request) -> Dict[str, Any]:
+        try:
+            data = await request.json()
+            prompt = data.get("prompt", "")
+            params = data.get("params", {})
+
+            if not prompt:
+                return {"success": False, "error": "Missing 'prompt' field."}
+
+            result = await self.generate(prompt, sampling_params=params)
+
+            return {
+                "success": True,
+                "result": result,
+                "model": self.engine.model_config.model,
+            }
+
+        except Exception as e:
+            print(f"[VLLM][Request Error] {traceback.format_exc()}")
+            return {"success": False, "error": str(e)}
 
 
 def model_binder(config: dict):
+    model_name = config.get("model_name")
+    extra_kwargs = {k: v for k, v in config.items() if k != "model_name"}
 
-    model_name = config.get("model_name", -1)
-
-    return VLLMDeployment.bind(model_name=model_name)
-
-# Define and run the deployment
-# deployment = VLLMDeployment.bind(model_name="meta-llama/Llama-2-7b-chat-hf")
-# serve.run(deployment)
-
-# You can then send a request using curl or another client:
-# curl -X POST -H "Content-Type: application/json" -d '{"prompt": "Tell me a story about a brave knight."}' http://127.0.0.1:8000/
+    return VLLMModelServer.bind(model_name=model_name, **extra_kwargs)
