@@ -10,7 +10,7 @@ import traceback
 
 @serve.deployment()
 class VLLMModelServer:
-    def __init__(self, model_name: str, **kwargs):
+    def __init__(self, model_name: str,device: str = "cuda", **kwargs):
         token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         if token:
             os.environ["HF_TOKEN"] = token  
@@ -77,6 +77,9 @@ class VLLMModelServer:
 
 def model_binder(config: dict):
     model_name = config.get("model_name")
+    tensor_parallel_size=config.get("tensor_parallel_size"),
+    device=config.get("device"),
     extra_kwargs = {k: v for k, v in config.items() if k != "model_name"}
 
-    return VLLMModelServer.bind(model_name=model_name, **extra_kwargs)
+    return VLLMModelServer.bind(model_name=model_name,tensor_parallel_size=tensor_parallel_size,
+        device=device, **extra_kwargs)
