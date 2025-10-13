@@ -78,8 +78,8 @@ class VLLMModelServer:
 def model_binder(config: dict):
     model_name = config.get("model_name")
     tensor_parallel_size=config.get("tensor_parallel_size"),
-    device=config.get("device"),
-    extra_kwargs = {k: v for k, v in config.items() if k not in ["model_name", "device", "tensor_parallel_size"]}
+
+    extra_kwargs = {k: v for k, v in config.items() if k not in ["model_name", "tensor_parallel_size"]}
 
     return VLLMModelServer.bind(model_name=model_name,tensor_parallel_size=tensor_parallel_size,
         device=device, **extra_kwargs)
