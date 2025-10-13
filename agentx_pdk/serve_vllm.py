@@ -17,7 +17,7 @@ class VLLMModelServer:
             print("[VLLM] Using Hugging Face token from env")
 
 
-        engine_args = AsyncEngineArgs(model=model_name,device=device, **kwargs)
+        engine_args = AsyncEngineArgs(model=model_name, **kwargs)
         print(f"[VLLM] Initializing model '{model_name}' with args: {kwargs}")
 
         # Initialize the vLLM async engine
