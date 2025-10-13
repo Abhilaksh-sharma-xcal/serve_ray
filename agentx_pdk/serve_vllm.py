@@ -26,11 +26,14 @@ class VLLMModelServer:
 
     async def generate(self, prompt: str, sampling_params: Dict[str, Any] = None) -> str:
 
-        params_dict = sampling_params or {
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "max_tokens": 256,
-        }
+        if sampling_params is None:
+            params_dict = {
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "max_tokens": 256,
+            }
+        else:
+            params_dict = sampling_params
         
         sampling_params_obj = SamplingParams(**params_dict)
 
@@ -77,7 +80,7 @@ class VLLMModelServer:
 
 def model_binder(config: dict):
     model_name = config.get("model_name")
-    tensor_parallel_size=config.get("tensor_parallel_size", 1),
+    tensor_parallel_size=config.get("tensor_parallel_size", 1)
 
     extra_kwargs = {k: v for k, v in config.items() if k not in ["model_name", "tensor_parallel_size"]}
 
