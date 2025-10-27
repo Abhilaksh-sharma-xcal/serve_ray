@@ -1,87 +1,107 @@
+import os
+import traceback
 import ray
 from ray import serve
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.async_llm_engine import AsyncLLMEngine
-from vllm import SamplingParams
-from typing import Dict, Any
-import os
-import json
-import traceback
+from vllm.entrypoints.openai.protocol import ChatCompletionRequest
+from vllm.entrypoints.openai.serving_models import OpenAIServingModels, BaseModelPath
+from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 
-@serve.deployment()
+# Initialize FastAPI app for ingress
+app = FastAPI()
+
+@serve.deployment(
+    ray_actor_options={"num_cpus": 4, "num_gpus": 1},
+    max_ongoing_requests=10,
+)
+@serve.ingress(app)
 class VLLMModelServer:
     def __init__(self, model_name: str, **kwargs):
+        """Initialize vLLM Engine and OpenAI-compatible serving layer."""
         token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
         if token:
-            os.environ["HF_TOKEN"] = token  
+            os.environ["HF_TOKEN"] = token
             print("[VLLM] Using Hugging Face token from env")
 
-
-        engine_args = AsyncEngineArgs(model=model_name, **kwargs)
         print(f"[VLLM] Initializing model '{model_name}' with args: {kwargs}")
+        engine_args = AsyncEngineArgs(model=model_name, **kwargs)
 
-        # Initialize the vLLM async engine
+        # Initialize async vLLM engine
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
-        self.request_counter = 0
 
-    async def generate(self, prompt: str, sampling_params: Dict[str, Any] = None) -> str:
+        # Configure OpenAI-compatible serving layer
+        base_model_paths = [BaseModelPath(name=model_name, model_path=model_name)]
+        openai_serving_models = OpenAIServingModels(
+            engine_client=self.engine,
+            model_config=self.engine.model_config,
+            base_model_paths=base_model_paths,
+            lora_modules=None,
+        )
 
-        if sampling_params is None:
-            params_dict = {
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "max_tokens": 256,
-            }
-        else:
-            params_dict = sampling_params
-        
-        sampling_params_obj = SamplingParams(**params_dict)
+        self.openai_serving_chat = OpenAIServingChat(
+            engine_client=self.engine,
+            model_config=self.engine.model_config,
+            models=openai_serving_models,
+            response_role="assistant",
+            request_logger=None,
+            chat_template=None,
+            chat_template_content_format="string",
+        )
 
+        print("[VLLM] OpenAI-compatible serving initialized successfully.")
+
+    # === /v1/chat/completions ===
+    @app.post("/v1/chat/completions")
+    async def chat_completions(
+        self, request: ChatCompletionRequest, raw_request: Request
+    ):
+        """OpenAI-style chat completion endpoint."""
         try:
-            request_id = f"req-{self.request_counter}"
-            self.request_counter += 1
+            generator = await self.openai_serving_chat.create_chat_completion(
+                request, raw_request
+            )
 
-            results_generator = self.engine.generate(prompt, sampling_params_obj, request_id=request_id)
-            final_output = None
-
-            async for request_output in results_generator:
-                final_output = request_output 
-
-            if not final_output or not final_output.outputs:
-                raise ValueError("No output generated.")
-
-            return final_output.outputs[0].text
-
+            if request.stream:
+                return StreamingResponse(
+                    content=generator, media_type="text/event-stream"
+                )
+            else:
+                return JSONResponse(content=generator.model_dump())
         except Exception as e:
             print(f"[VLLM][Error] {traceback.format_exc()}")
-            raise RuntimeError(f"Generation failed: {e}")
+            return JSONResponse(content={"error": str(e)}, status_code=500)
 
-    async def __call__(self, request) -> Dict[str, Any]:
-        try:
-            data = await request.json()
-            prompt = data.get("prompt", "")
-            params = data.get("params", {})
+    # === /v1/models ===
+    @app.get("/v1/models")
+    async def models(self):
+        """List available models."""
+        models = await self.openai_serving_chat.show_available_models()
+        return JSONResponse(content=models.model_dump())
 
-            if not prompt:
-                return {"success": False, "error": "Missing 'prompt' field."}
-
-            result = await self.generate(prompt, sampling_params=params)
-
-            return {
-                "success": True,
-                "result": result,
-                "model": self.engine.model_config.model,
-            }
-
-        except Exception as e:
-            print(f"[VLLM][Request Error] {traceback.format_exc()}")
-            return {"success": False, "error": str(e)}
+    # === /health ===
+    @app.get("/health")
+    async def health(self):
+        """Simple health check."""
+        return {"status": "healthy"}
 
 
+# === Helper function for Ray Serve binding ===
 def model_binder(config: dict):
     model_name = config.get("model_name")
-    tensor_parallel_size=config.get("tensor_parallel_size", 1)
+    tensor_parallel_size = config.get("tensor_parallel_size", 1)
 
-    extra_kwargs = {k: v for k, v in config.items() if k not in ["model_name", "tensor_parallel_size"]}
+    extra_kwargs = {
+        k: v
+        for k, v in config.items()
+        if k not in ["model_name", "tensor_parallel_size"]
+    }
 
-    return VLLMModelServer.bind(model_name=model_name,tensor_parallel_size=tensor_parallel_size, **extra_kwargs)
+    return VLLMModelServer.bind(
+        model_name=model_name,
+        tensor_parallel_size=tensor_parallel_size,
+        **extra_kwargs,
+    )
