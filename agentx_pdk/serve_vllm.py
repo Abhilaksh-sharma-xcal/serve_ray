@@ -10,14 +10,12 @@ from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.protocol import ChatCompletionRequest
 from vllm.entrypoints.openai.serving_models import OpenAIServingModels, BaseModelPath
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
+from transformers import AutoTokenizer 
 
 # Initialize FastAPI app for ingress
 app = FastAPI()
 
-@serve.deployment(
-    ray_actor_options={"num_cpus": 4, "num_gpus": 1},
-    max_ongoing_requests=10,
-)
+@serve.deployment()
 @serve.ingress(app)
 class VLLMModelServer:
     def __init__(self, model_name: str, **kwargs):
@@ -27,12 +25,32 @@ class VLLMModelServer:
             os.environ["HF_TOKEN"] = token
             print("[VLLM] Using Hugging Face token from env")
 
-        print(f"[VLLM] Initializing model '{model_name}' with args: {kwargs}")
+
         engine_args = AsyncEngineArgs(model=model_name, **kwargs)
 
         # Initialize async vLLM engine
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
+        chat_template = None
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            chat_template = getattr(tokenizer, "chat_template", None)
+            if not chat_template:
+                raise ValueError("No chat template found; using fallback.")
+            print(f"[VLLM] Loaded chat template from tokenizer for {model_name}.")
+        except Exception as e:
+            print(f"[VLLM][Warning] {e}")
+            chat_template = (
+                "{% for message in messages %}"
+                "{% if message['role'] == 'system' %}System: {{ message['content'] }}\n"
+                "{% elif message['role'] == 'user' %}User: {{ message['content'] }}\n"
+                "{% elif message['role'] == 'assistant' %}Assistant: {{ message['content'] }}\n"
+                "{% endif %}"
+                "{% endfor %}\nAssistant:"
+            )
+            print(f"[VLLM] Using fallback chat template for {model_name}.")
+
+        
         # Configure OpenAI-compatible serving layer
         base_model_paths = [BaseModelPath(name=model_name, model_path=model_name)]
         openai_serving_models = OpenAIServingModels(
@@ -48,7 +66,7 @@ class VLLMModelServer:
             models=openai_serving_models,
             response_role="assistant",
             request_logger=None,
-            chat_template=None,
+            chat_template=chat_template,
             chat_template_content_format="string",
         )
 
@@ -89,7 +107,6 @@ class VLLMModelServer:
         return {"status": "healthy"}
 
 
-# === Helper function for Ray Serve binding ===
 def model_binder(config: dict):
     model_name = config.get("model_name")
     tensor_parallel_size = config.get("tensor_parallel_size", 1)
