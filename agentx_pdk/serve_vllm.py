@@ -15,7 +15,10 @@ from transformers import AutoTokenizer
 # Initialize FastAPI app for ingress
 app = FastAPI()
 
-@serve.deployment
+@serve.deployment(
+    ray_actor_options={"num_cpus": 4, "num_gpus": 1},
+    max_ongoing_requests=10,
+)
 @serve.ingress(app)
 class VLLMModelServer:
     def __init__(self, model_name: str, **kwargs):
