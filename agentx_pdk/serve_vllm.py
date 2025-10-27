@@ -15,8 +15,7 @@ from transformers import AutoTokenizer
 # Initialize FastAPI app for ingress
 app = FastAPI()
 
-@serve.deployment(
-)
+@serve.deployment
 @serve.ingress(app)
 class VLLMModelServer:
     def __init__(self, model_name: str, **kwargs):
