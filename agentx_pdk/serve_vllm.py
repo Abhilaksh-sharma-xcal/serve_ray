@@ -16,8 +16,6 @@ from transformers import AutoTokenizer
 app = FastAPI()
 
 @serve.deployment(
-    ray_actor_options={"num_cpus": 4, "num_gpus": 1},
-    max_ongoing_requests=10,
 )
 @serve.ingress(app)
 class VLLMModelServer:
