@@ -126,15 +126,15 @@ class DETRLayoutDetector:
         )[0]
         
         # Format results
+        # Format results
         detections = []
         for i, (score, label, box) in enumerate(zip(
             bbox_results["scores"],
             bbox_results["labels"],
             bbox_results["boxes"]
         )):
-            label_name = self.model.config.id2label[label.item()]
             detections.append({
-                "label": label_name,
+                "label": self.model.config.id2label[label.item()],
                 "score": score.item(),
                 "box": {
                     "xmin": box[0].item(),
@@ -143,13 +143,20 @@ class DETRLayoutDetector:
                     "ymax": box[3].item()
                 }
             })
-        
+
+        # segmentation results is a dict, extract mask shape
+        if "masks" in segmentation_results:
+            segmentation_shape = list(segmentation_results["masks"].shape)
+        else:
+            segmentation_shape = None
+
         return {
             "detections": detections,
             "num_detections": len(detections),
             "image_size": {"width": image.width, "height": image.height},
-            "segmentation_shape": list(segmentation_results.shape)
+            "segmentation_shape": segmentation_shape
         }
+
 
     async def __call__(self, request: Request) -> Dict[str, Any]:
         """
