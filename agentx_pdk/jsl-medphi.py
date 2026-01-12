@@ -11,17 +11,45 @@ class MedPhi2TextGenerator:
         self.model_name = "johnsnowlabs/JSL-MedPhi2-2.7B"
         print(f"🔧 Loading model: {self.model_name}")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
-            trust_remote_code=True
-        )
+        # Force use microsoft/phi-2 config as fallback
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                trust_remote_code=True,
+                resume_download=True,
+            )
+        except Exception as e:
+            print(f"⚠️  Failed to load tokenizer: {e}")
+            print("🔄 Falling back to microsoft/phi-2 tokenizer")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                "microsoft/phi-2",
+                trust_remote_code=True
+            )
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True
-        )
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                trust_remote_code=True,
+                resume_download=True,
+            )
+        except Exception as e:
+            print(f"⚠️  Failed to load model with auto config: {e}")
+            print("🔄 Trying with explicit config from microsoft/phi-2")
+            from transformers import AutoConfig
+            config = AutoConfig.from_pretrained(
+                "microsoft/phi-2",
+                trust_remote_code=True
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                config=config,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                trust_remote_code=True,
+                resume_download=True,
+            )
 
         self.model.eval()
         print("✅ Model loaded successfully")
