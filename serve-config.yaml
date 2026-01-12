@@ -1,0 +1,22 @@
+- name: medphi2
+  route_prefix: /medphi2
+  import_path: jsl-medphi:model_binder
+  args:
+    device: 0
+
+  runtime_env:
+    pip:
+      - "torch"
+      - "transformers>=4.38.0"
+      - "accelerate"
+      - "fastapi"
+      - "uvicorn"
+      - "numpy<2.0"
+      - "pyarrow>=12.0.0"
+
+  deployments:
+    - name: MedPhi2TextGenerator
+      ray_actor_options:
+        num_cpus: 4
+        num_gpus: 1
+      num_replicas: 1
