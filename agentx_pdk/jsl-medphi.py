@@ -58,11 +58,30 @@ class MedPhi2TextGenerator:
         """
         Converts chat messages to model prompt
         """
-        return self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        # Check if tokenizer has chat template
+        if hasattr(self.tokenizer, 'apply_chat_template') and self.tokenizer.chat_template is not None:
+            try:
+                return self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+            except Exception as e:
+                print(f"⚠️ Chat template failed: {e}, using simple format")
+
+        # Fallback: Build prompt manually for Phi-2 format
+        prompt = ""
+        for message in messages:
+            role = message.get("role", "user")
+            content = message.get("content", "")
+            if role == "system":
+                prompt += f"System: {content}\n"
+            elif role == "user":
+                prompt += f"Instruct: {content}\n"
+            elif role == "assistant":
+                prompt += f"Output: {content}\n"
+        prompt += "Output:"
+        return prompt
 
     def generate(
         self,
@@ -96,14 +115,21 @@ class MedPhi2TextGenerator:
     async def __call__(self, request: Request) -> Dict[str, Any]:
         data = await request.json()
 
-        messages = data.get(
-            "messages",
-            [{"role": "user", "content": "Hello"}]
-        )
+        # Support both "prompt" (simple string) and "messages" (chat format)
+        if "prompt" in data:
+            messages = [{"role": "user", "content": data["prompt"]}]
+        else:
+            messages = data.get(
+                "messages",
+                [{"role": "user", "content": "Hello"}]
+            )
+
+        # Handle max_tokens or max_new_tokens
+        max_new_tokens = data.get("max_new_tokens") or data.get("max_tokens", 256)
 
         result = self.generate(
             messages=messages,
-            max_new_tokens=data.get("max_new_tokens", 256),
+            max_new_tokens=max_new_tokens,
             temperature=data.get("temperature", 0.7),
             top_p=data.get("top_p", 0.95),
             top_k=data.get("top_k", 50),
