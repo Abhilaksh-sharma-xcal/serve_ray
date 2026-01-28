@@ -47,9 +47,9 @@ class DETRLayoutDetector:
         print(f"[DETRLayoutDetector] Loading model '{model_name}' on {self.device}")
         
         # Check for HuggingFace token
-        token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
-        if token:
-            print("[DETRLayoutDetector] Using HuggingFace token from environment")
+        # token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        # if token:
+        #     print("[DETRLayoutDetector] Using HuggingFace token from environment")
         
         # Load image processor and model
         self.img_processor = AutoImageProcessor.from_pretrained(
