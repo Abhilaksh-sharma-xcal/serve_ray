@@ -34,10 +34,10 @@ class ModelServer:
             **kwargs
         }
         
-        token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
-        if token:
-            print("[ModelServer] Using Hugging Face token from environment")
-            pipe_kwargs["use_auth_token"] = token
+        # token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
+        # if token:
+        #     print("[ModelServer] Using Hugging Face token from environment")
+        #     pipe_kwargs["use_auth_token"] = token
         print(f"[ModelServer] Loading '{model_name}' for task '{task_type}' on device {device}")
         self.pipe = pipeline(**pipe_kwargs)
         
