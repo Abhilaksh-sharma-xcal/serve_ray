@@ -53,12 +53,10 @@ class DETRLayoutDetector:
         
         # Load image processor and model
         self.img_processor = AutoImageProcessor.from_pretrained(
-            model_name,
-            use_auth_token=token if token else None
+            model_name
         )
         self.model = DetrForSegmentation.from_pretrained(
-            model_name,
-            use_auth_token=token if token else None
+            model_name
         )
         self.model.to(self.device)
         self.model.eval()
